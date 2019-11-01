@@ -1,0 +1,267 @@
+<html>
+	<head>
+		<title>Micro:Bit Writer</title>
+		<hta:application id="oHTA"></hta:application>
+	</head>
+	<body>
+		<form name="form1">
+			<p>Input File:<input name="filename" type="text" size="80"/>
+		       <input type="file" name="filename2" size="1" onChange="go_copy()"/><br>
+			   Save Folder:<input name="foldername" type="text" size="70"/>
+		       <input type="file" name="foldername2" size="1" onChange="go_copy2()"/>
+			   <input type="checkbox" name="history"/>History<br>
+		       <input type="button" name="default" value="default"onClick="go_def()" /></p>
+		    <p><input type="button" value="Start"onClick="go_exec()" />
+		       <input type="button" value="Stop"onClick="go_stop()" />
+		       <input type="button" value="End"onClick="go_end()" /></p>
+		    <textarea name="log" cols="80" rows="20"></textarea>
+		    <p><input type="button" value="Log Clear"onClick="go_clear()" /></p>
+		</form>
+		<script language="VBScript">
+			OPTION EXPLICIT
+
+			dim TargetVolumeName
+			dim i,fObj,TargetDrive,TargetFile,TargetFolder
+			dim pfName,feFlag,drFlag
+			dim pFolder,MaxTimeStamp,mtPathName,mtFileName,wFile,wFileName
+			dim myName,wPM,iniFileName,iniBuff,iniStr
+			dim pInput,pOutput,pSave,pHistory,pPreDelete
+			dim reObj
+
+			Dim WshShell, oExec,pFlag,tID
+
+			window.resizeto 900,700
+
+			Set WshShell = CreateObject("WScript.Shell")
+			set fObj = CreateObject("Scripting.FileSystemObject")
+			Set reObj = CreateObject("VBScript.RegExp")
+
+			if left(oHTA.CommandLine,1)="""" then
+				myName=trim(mid(oHTA.CommandLine,2,instr(2,oHTA.CommandLine,"""")-2))
+				wPM=trim(mid(oHTA.CommandLine,instr(2,oHTA.CommandLine,"""")+1))
+			else
+				myName=trim(mid(oHTA.CommandLine,1,instr(2,oHTA.CommandLine," ")-1))
+				wPM=trim(mid(oHTA.CommandLine,instr(2,oHTA.CommandLine," ")+1))
+			end if
+
+			iniFileName=left(myName,instrrev(myName,".")) & "ini"
+			iniBuff=fObj.GetFile(iniFileName).OpenAsTextStream.ReadAll
+			pInput="":pOutput="":pSave=""
+			for each iniStr in Split(iniBuff,Chr(13))
+				iniStr=Lcase(Replace(iniStr,Chr(10),""))
+				if instr(iniStr,"=") > 0 then
+					if Split(iniStr,"=")(0)="inputfile" then pInput=Trim(Split(iniStr,"=")(1))
+					if Split(iniStr,"=")(0)="outputdrive" then pOutput=Trim(Split(iniStr,"=")(1))
+					if Split(iniStr,"=")(0)="savefolder" then pSave=Trim(Split(iniStr,"=")(1))
+					if Split(iniStr,"=")(0)="history" then pHistory=Trim(Split(iniStr,"=")(1))
+					if Split(iniStr,"=")(0)="predelete" then pPreDelete=Trim(Split(iniStr,"=")(1))
+				end if
+			next
+
+			document.title = fobj.GetBaseName(MyName)
+			document.form1.filename.value = pInput
+			document.form1.foldername.value = pSave
+			document.form1.history.Checked = pHistory
+			TargetVolumeName = pOutput
+			
+		    Sub go_exec()
+				on error resume next
+				pInput = RepEnvSTr(document.form1.filename.value)
+				pfName=fobj.GetParentFolderName(pInput)		'get folder name
+
+				set pFolder = fobj.GetFolder(pfName)
+				if err<>0 then
+					msgbox(err.description)
+					exit sub
+				end if
+				on error goto 0
+
+				TargetFolder = RepEnvSTr(document.form1.foldername.value)
+				if fobj.FolderExists(TargetFolder)=False then
+					msgbox("Save folder access faled")
+					Exit SUb
+				end if
+
+				tID = SetInterval("Writer()",1000)
+
+				document.form1.filename.disabled = true
+				document.form1.filename2.disabled = true
+				document.form1.foldername.disabled = true
+				document.form1.foldername2.disabled = true
+				document.form1.default.disabled = true
+
+				Call WriteLog("Start")
+			End Sub
+
+		    Sub go_stop()
+
+				ClearInterval(tID)
+
+				document.form1.filename.disabled = false
+				document.form1.filename2.disabled = false
+				document.form1.foldername.disabled = false
+				document.form1.foldername2.disabled = false
+				document.form1.default.disabled = false
+
+				Call WriteLog("Stop")
+			End Sub
+
+		    Sub go_end()
+				iniFileName=left(myName,instrrev(myName,".")) & "ini"
+	    		With fObj.CreateTextFile(iniFileName)
+		        	.WriteLine "inputfile=" & document.form1.filename.value
+		        	.WriteLine "outputdrive=" & TargetVolumeName
+		        	.WriteLine "savefolder=" & document.form1.foldername.value
+		        	.WriteLine "history=" & document.form1.history.Checked
+		        	.WriteLine "predelete=" & pPreDelete
+					.Close
+				end With
+				ClearInterval(tID)
+				Window.close
+			End Sub
+
+			Sub go_def()
+				iniFileName=left(myName,instrrev(myName,".")) & "def.ini"
+				iniBuff=fObj.GetFile(iniFileName).OpenAsTextStream.ReadAll
+				pInput="":pOutput="":pSave=""
+				for each iniStr in Split(iniBuff,Chr(13))
+					iniStr=Lcase(Replace(iniStr,Chr(10),""))
+					if instr(iniStr,"=") > 0 then
+						if Split(iniStr,"=")(0)="inputfile" then pInput=Trim(Split(iniStr,"=")(1))
+						if Split(iniStr,"=")(0)="outputdrive" then pOutput=Trim(Split(iniStr,"=")(1))
+						if Split(iniStr,"=")(0)="savefolder" then pSave=Trim(Split(iniStr,"=")(1))
+						if Split(iniStr,"=")(0)="history" then pHistory=Trim(Split(iniStr,"=")(1))
+						if Split(iniStr,"=")(0)="predelete" then pPreDelete=Trim(Split(iniStr,"=")(1))
+					end if
+				next
+
+				document.form1.filename.value = pInput
+				document.form1.foldername.value = pSave
+				document.form1.history.Checked = pHistory
+
+			End Sub
+		    Sub go_copy()
+				document.form1.filename.value = document.form1.filename2.value
+			End Sub
+		    Sub go_copy2()
+				document.form1.foldername.value = left(document.form1.foldername2.value,instrrev(document.form1.foldername2.value,"\"))
+			End Sub
+		    Sub go_clear()
+				document.form1.log.value = ""
+		    End Sub
+
+			Sub Writer()
+
+				ClearInterval(tID)
+
+'				Call WriteLog("Writer Called")
+
+				MaxTimeStamp = ""
+				mtFileName = ""
+				feFlag = 0
+				for each wFile in pFolder.Files
+					if CheckString(Lcase(RepEnvStr(document.form1.filename.value)),Lcase(wFile.Path)) then
+						if MaxTimeStamp < wFile.DateLastModified or MaxTimeStamp = "" then
+							MaxTimeStamp = wFile.DateLastModified
+							mtPathName = wFile.Path
+							mtFileName = wFile.Name
+							feFlag = 1
+						end if
+					end if
+				next
+				if feFlag = 1 then
+					Call WriteLog("file " & mtFileName & " exist")
+				else
+					tID = SetInterval("Writer()",1000)
+					exit sub
+				end if
+
+				drFlag = 0
+				for each TargetDrive in fobj.Drives
+					if TargetDrive.IsReady = true then
+						if lcase(TargetDrive.VolumeName) = lcase(TargetVolumeName) then
+							drFlag = 1
+							exit for
+						end if
+					end if
+				next
+				if drFlag = 1 then
+					Call WriteLog("Target " & TargetDrive & " exist")
+				else
+					tID = SetInterval("Writer()",1000)
+					exit sub
+				end if
+
+				TargetFolder = RepEnvSTr(document.form1.foldername.value)
+				if document.form1.history.Checked then
+					TargetFile = GetTargetFile(TargetFolder & "\" & mtFileName)
+					WshShell.Run "%comspec% /c ren """ & TargetFolder & "\" & mtFileName & """ """ & fobj.GetBaseName(TargetFile) & ".*""",0,True	'rename
+					TargetFile = TargetFolder & "\" & mtFileName
+				else
+					TargetFile = TargetFolder & "\" & mtFileName
+				end if
+
+				Call WriteLog("file " & mtFileName & " Save Start")
+				WshShell.Run "%comspec% /c copy /y """ & mtPathName & """ """ & TargetFile & """",0,True	'save
+				Call WriteLog("file " &mtFileName & " Save End")
+
+				Call WriteLog("file " & mtFileName & " Delete Start")
+				WshShell.Run "%comspec% /c del """ & mtPathName,0,True	'del
+				Call WriteLog("file " &mtFileName & " Delete End")
+
+				if lcase(pPreDelete) = "true" then
+					for each wFile in TargetDrive.RootFolder.Files
+						WshShell.Run "%comspec% /c del """ & wFile.Path,0,True	'pre delete
+					next
+				end if
+
+				Call WriteLog("file " & mtFileName & " Copy Start")
+				WshShell.Run "%comspec% /c copy """ & TargetFile & """ """ & TargetDrive & """",0,True		'copy
+				Call WriteLog("file " & mtFileName & " Copy End")
+
+				tID = SetInterval("Writer()",1000)
+
+		    End Sub
+
+			Function CheckString(pattern,testString)
+				pattern = replace(pattern,"\","\\")
+				pattern = replace(pattern,".","\.")
+				pattern = replace(pattern,"*",".*")
+				pattern = replace(pattern,"?",".")
+				reObj.Pattern = "^" & pattern & "$"
+				CheckString = reObj.Test(testString)
+			end Function
+
+			Function GetTargetFile(TargetFile)
+				dim wFolder,wFile,wExt,his
+
+				wFolder = fobj.GetParentFolderName(TargetFile)
+				wFile = fobj.GetBaseName(TargetFile)
+				wExt = fobj.GetExtensionName(TargetFile)
+
+				his = 0
+				do while fObj.FileExists(TargetFile)
+					his = his + 1
+					TargetFile = wFolder & "\" & wFile & " (" & his & ")." & wExt
+				loop
+				GetTargetFile = TargetFile
+			end Function
+
+			Function RepEnvStr(oStr)
+				RepEnvStr = WshShell.ExpandEnvironmentStrings(oStr)
+			End Function
+
+			Sub WriteLog(lMSG)
+				if ubound(split(document.form1.log.value,vbCrLf)) >= 19 then
+					document.form1.log.value = mid(document.form1.log.value,instr(document.form1.log.value,vbCrLf) + 2)
+				end if
+				if document.form1.log.value<>"" then
+					document.form1.log.value = document.form1.log.value & vbCrLf
+				end if
+				document.form1.log.value = document.form1.log.value & now() & " "
+				document.form1.log.value = document.form1.log.value & lMSG
+				WshShell.Run "%comspec% /c @",0,True		'DoEvents
+			End Sub
+		</script>
+	</body>
+</html>
